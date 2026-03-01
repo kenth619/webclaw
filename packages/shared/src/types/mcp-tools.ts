@@ -149,3 +149,9 @@ export interface HandleDialogResult {
   defaultPrompt?: string;
   handled: boolean;
 }
+
+/** Parameters for evaluate tool */
+export interface EvaluateParams {
+  expression: string;
+  tabId?: number;
+}

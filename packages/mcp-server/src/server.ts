@@ -1,7 +1,7 @@
 /**
  * WebClaw MCP Server.
  *
- * Exposes 20 browser interaction tools via MCP protocol (stdio transport).
+ * Exposes 21 browser interaction tools via MCP protocol (stdio transport).
  * Communicates with the Chrome Extension via WebSocket.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -602,6 +602,32 @@ export function createWebClawServer(options: { wsClient: WebSocketClient }): Mcp
       }
       return {
         content: [{ type: 'text', text }],
+      };
+    }
+  );
+
+  // --- Tool: evaluate ---
+  server.tool(
+    'evaluate',
+    'Evaluate a JavaScript expression in the page context and return the result. '
+    + 'Useful for reading page state not available in the accessibility snapshot '
+    + '(e.g., localStorage, cookies, JS variables, computed styles).',
+    {
+      expression: z.string().min(1).describe(
+        'JavaScript expression to evaluate in the page context. '
+        + 'Examples: "document.title", "localStorage.getItem(\'key\')", '
+        + '"(() => { return document.querySelectorAll(\'a\').length; })()"'
+      ),
+      tabId: z.number().int().optional().describe('Target tab ID (defaults to active tab)'),
+    },
+    async ({ expression, tabId }) => {
+      const response = await requestWithSessionTab('evaluate', { expression }, tabId);
+      if (response.type === 'error') {
+        return formatErrorResponse(response.payload);
+      }
+      const result = response.payload as { result: string; type: string };
+      return {
+        content: [{ type: 'text', text: `[${result.type}] ${result.result}` }],
       };
     }
   );

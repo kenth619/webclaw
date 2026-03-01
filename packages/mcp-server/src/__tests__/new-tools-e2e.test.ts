@@ -81,9 +81,9 @@ describe('v0.4.0 New Tools E2E (MCP Protocol)', () => {
     expect(info!.version).toBe(PKG_VERSION);
   });
 
-  it('lists exactly 20 tools', async () => {
+  it('lists exactly 21 tools', async () => {
     const { tools } = await mcpClient.listTools();
-    expect(tools).toHaveLength(20);
+    expect(tools).toHaveLength(21);
   });
 
   it('new tools are present in tool list', async () => {

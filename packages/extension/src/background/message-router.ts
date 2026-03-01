@@ -23,6 +23,7 @@ import type {
   ScrollPageParams,
   DropFilesParams,
   HandleDialogParams,
+  EvaluateParams,
 } from 'webclaw-shared';
 import { createResponse, createError } from 'webclaw-shared';
 import type { TabManager } from './tab-manager';
@@ -153,6 +154,9 @@ export class MessageRouter {
           break;
         case 'handleDialog':
           result = await this.handleDialogRequest(payload as HandleDialogParams);
+          break;
+        case 'evaluate':
+          result = await this.handleEvaluate(payload as EvaluateParams);
           break;
         case 'ping':
           result = { pong: true, timestamp: Date.now() };
@@ -479,6 +483,64 @@ export class MessageRouter {
     }
     const tabId = await this.tabManager.getTargetTabId(params.tabId);
     return this.dialogHandler.handleDialog(tabId, params);
+  }
+
+  private async handleEvaluate(params: EvaluateParams): Promise<unknown> {
+    const tabId = await this.tabManager.getTargetTabId(params.tabId);
+
+    const [scriptResult] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: (expr: string) => {
+        try {
+          const result = (0, eval)(expr); // indirect eval → global scope
+          if (result instanceof Promise) {
+            return result.then(serialize).catch((err: unknown) => ({
+              result: String(err), type: 'error',
+            }));
+          }
+          return serialize(result);
+        } catch (err) {
+          return { result: String(err), type: 'error' };
+        }
+
+        function serialize(value: unknown): { result: string; type: string } {
+          if (value === undefined) return { result: 'undefined', type: 'undefined' };
+          if (value === null) return { result: 'null', type: 'null' };
+          if (value instanceof HTMLElement) {
+            const html = value.outerHTML;
+            return { result: html.length > 4000 ? html.slice(0, 4000) + '...' : html, type: 'HTMLElement' };
+          }
+          if (value instanceof NodeList || value instanceof HTMLCollection) {
+            const items = Array.from(value).map((el) =>
+              el instanceof HTMLElement ? el.outerHTML.slice(0, 200) : String(el)
+            );
+            return { result: JSON.stringify(items), type: 'NodeList' };
+          }
+          const t = typeof value;
+          if (t === 'object') {
+            try {
+              const json = JSON.stringify(value, null, 2);
+              return { result: json.length > 8000 ? json.slice(0, 8000) + '...' : json, type: Array.isArray(value) ? 'array' : 'object' };
+            } catch {
+              return { result: String(value), type: 'object' };
+            }
+          }
+          if (t === 'function') return { result: String(value), type: 'function' };
+          return { result: String(value), type: t };
+        }
+      },
+      args: [params.expression],
+    });
+
+    if (!scriptResult?.result) {
+      throw new Error('Script execution returned no result');
+    }
+    const evalResult = scriptResult.result as { result: string; type: string };
+    if (evalResult.type === 'error') {
+      throw new Error(`Evaluation error: ${evalResult.result}`);
+    }
+    return evalResult;
   }
 
   /** Validate that the snapshot ID matches the current tab snapshot */

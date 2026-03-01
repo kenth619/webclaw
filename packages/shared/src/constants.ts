@@ -52,6 +52,7 @@ export const OPERATION_TIMEOUTS: Record<string, number> = {
   scrollPage: 10_000,
   dropFiles: 30_000,
   handleDialog: 10_000,
+  evaluate: 30_000,
   ping: 5_000,
 };
 

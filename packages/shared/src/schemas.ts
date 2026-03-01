@@ -133,3 +133,8 @@ export const handleDialogSchema = z.object({
   promptText: z.string().optional(),
   tabId: z.number().int().optional(),
 });
+
+export const evaluateSchema = z.object({
+  expression: z.string().min(1),
+  tabId: z.number().int().optional(),
+});

@@ -76,6 +76,7 @@ describe('MCP Server tool registration', () => {
       'scroll_page',
       'drop_files',
       'handle_dialog',
+      'evaluate',
     ];
 
     for (const name of toolNames) {
@@ -89,8 +90,8 @@ describe('MCP Server tool registration', () => {
       );
     }
 
-    // If we get here without throwing, all 20 registered successfully
-    expect(toolNames).toHaveLength(20);
+    // If we get here without throwing, all 21 registered successfully
+    expect(toolNames).toHaveLength(21);
   });
 });
 
