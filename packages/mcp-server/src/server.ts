@@ -6,8 +6,8 @@
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ERROR_RECOVERY } from 'webclaw-shared';
 import type { BridgeMessage, BridgeMethod, ErrorCode } from 'webclaw-shared';
@@ -308,8 +308,9 @@ export function createWebClawServer(options: { wsClient: WebSocketClient }): Mcp
     'Capture a screenshot of the current visible tab',
     {
       tabId: z.number().int().optional().describe('Target tab ID'),
+      savePath: z.string().optional().describe('File path to save the screenshot PNG (e.g., "./screenshot.png"). If omitted, the image is returned inline.'),
     },
-    async ({ tabId }) => {
+    async ({ tabId, savePath }) => {
       const response = await requestWithSessionTab('screenshot', {}, tabId);
       if (response.type === 'error') {
         return formatErrorResponse(response.payload);
@@ -317,6 +318,16 @@ export function createWebClawServer(options: { wsClient: WebSocketClient }): Mcp
       const result = response.payload as { dataUrl: string; tabId: number };
       // Extract base64 data from data URL
       const base64 = result.dataUrl.replace(/^data:image\/png;base64,/, '');
+
+      if (savePath) {
+        const absPath = isAbsolute(savePath) ? savePath : resolve(process.cwd(), savePath);
+        mkdirSync(dirname(absPath), { recursive: true });
+        writeFileSync(absPath, Buffer.from(base64, 'base64'));
+        return {
+          content: [{ type: 'text', text: `Screenshot saved to ${absPath}` }],
+        };
+      }
+
       return {
         content: [{
           type: 'image',
