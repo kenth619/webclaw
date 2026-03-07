@@ -109,7 +109,8 @@ export function createWebClawServer(options: { wsClient: WebSocketClient }): Mcp
   // --- Tool: page_snapshot ---
   server.tool(
     'page_snapshot',
-    'Get a compact accessibility tree snapshot of the current page with @ref labels for interactive elements',
+    'Get a compact accessibility tree snapshot of the current page with @ref labels for interactive elements. '
+    + 'For large pages (e.g., search results, feeds), use interactiveOnly: true or focusRegion to reduce token usage.',
     {
       tabId: z.number().int().optional().describe('Target tab ID (defaults to active tab)'),
       focusRegion: z.string().optional().describe('Focus on a specific landmark region (e.g., "main", "nav", "header", "footer", "sidebar", "complementary", "banner", "contentinfo")'),
