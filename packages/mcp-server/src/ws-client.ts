@@ -197,16 +197,21 @@ export class WebSocketClient {
 
   private async _doEnsureConnected(timeoutMs: number): Promise<void> {
     if (!this.chromeLaunched) {
-      console.error('[WebClaw] Chrome extension not connected. Launching Chrome...');
-      const launched = await launchChrome();
-      if (!launched) {
-        throw new Error(
-          'Could not launch Chrome automatically.\n' +
-          'Please start Chrome manually with the WebClaw extension installed.'
-        );
+      if (process.env.WEBCLAW_NO_AUTOLAUNCH === '1') {
+        console.error('[WebClaw] Chrome extension not connected. Auto-launch disabled by WEBCLAW_NO_AUTOLAUNCH=1.');
+        this.chromeLaunched = true;
+      } else {
+        console.error('[WebClaw] Chrome extension not connected. Launching Chrome...');
+        const launched = await launchChrome();
+        if (!launched) {
+          throw new Error(
+            'Could not launch Chrome automatically.\n' +
+            'Please start Chrome manually with the WebClaw extension installed.'
+          );
+        }
+        this.chromeLaunched = true;
+        console.error('[WebClaw] Chrome launched. Waiting for extension to connect...');
       }
-      this.chromeLaunched = true;
-      console.error('[WebClaw] Chrome launched. Waiting for extension to connect...');
     } else {
       console.error('[WebClaw] Waiting for Chrome extension to reconnect...');
     }
@@ -222,14 +227,21 @@ export class WebSocketClient {
       const timeout = setTimeout(() => {
         this.wss.removeListener('connection', onConnection);
 
-        reject(new Error(
-          'Chrome was launched but the WebClaw extension did not connect.\n' +
-          'Please ensure the WebClaw extension is installed and enabled:\n' +
-          '  1. Open chrome://extensions/\n' +
-          '  2. Enable Developer mode\n' +
-          '  3. Click "Load unpacked" and select the extension dist/ folder\n' +
-          '  4. Verify the extension is enabled'
-        ));
+        if (process.env.WEBCLAW_NO_AUTOLAUNCH === '1') {
+          reject(new Error(
+            'WebClaw extension is not connected. Auto-launch is disabled (WEBCLAW_NO_AUTOLAUNCH=1).\n' +
+            'Start your dedicated Chrome profile manually via your `Chrome (Claude).bat` / `Chrome (LibreChat).bat` launcher.'
+          ));
+        } else {
+          reject(new Error(
+            'Chrome was launched but the WebClaw extension did not connect.\n' +
+            'Please ensure the WebClaw extension is installed and enabled:\n' +
+            '  1. Open chrome://extensions/\n' +
+            '  2. Enable Developer mode\n' +
+            '  3. Click "Load unpacked" and select the extension dist/ folder\n' +
+            '  4. Verify the extension is enabled'
+          ));
+        }
       }, timeoutMs);
 
       const onConnection = () => {
