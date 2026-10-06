@@ -14,6 +14,7 @@ import { install } from './installer.js';
 import { WEBSOCKET_DEFAULT_PORT, WEBSOCKET_PORT_ENV, WEBSOCKET_PORT_RANGE_SIZE } from 'webclaw-shared';
 
 const args = process.argv.slice(2);
+const PORT_FALLBACK_ENV = 'WEBCLAW_PORT_FALLBACK';
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`webclaw-mcp - WebMCP-native browser agent
@@ -30,6 +31,7 @@ Description:
 
 Environment variables:
   ${WEBSOCKET_PORT_ENV}    WebSocket port (default: ${WEBSOCKET_DEFAULT_PORT})
+  WEBCLAW_PORT_FALLBACK  Comma-separated ports to try, in order, if WEBCLAW_PORT is in use
 
 Claude Desktop config:
   {
@@ -44,29 +46,54 @@ More info: https://github.com/kuroko1t/webclaw`);
   await install();
 } else {
   const explicitPort = process.env[WEBSOCKET_PORT_ENV] ? Number(process.env[WEBSOCKET_PORT_ENV]) : null;
+  // PATCHED (port-fallback, 2026-10-06): Claude Desktop now starts each local
+  // MCP server twice (its LocalMcpServerManager and the per-chat launcher). With
+  // only a pinned port, the second copy hit EADDRINUSE and exited, and chats
+  // lost webclaw. WEBCLAW_PORT_FALLBACK lists extra ports to try, in order. It
+  // is an explicit list rather than a scan so that a copy can never land on a
+  // port another browser profile's allowlist uses (that is what the pin is for).
+  const fallbackPorts = (process.env[PORT_FALLBACK_ENV] ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map(Number)
+    .filter((p) => Number.isInteger(p) && p > 0 && p < 65536);
 
   let wsClient: WebSocketClient;
 
   if (explicitPort !== null) {
-    // Explicit port: use only that port (backward compatible)
-    try {
-      wsClient = await WebSocketClient.create(explicitPort);
-    } catch (err) {
-      const error = err as NodeJS.ErrnoException;
-      if (error.code === 'EADDRINUSE') {
-        console.error(
-          `[WebClaw] Port ${explicitPort} is already in use.\n` +
-            `  Another WebClaw instance may be running. To fix:\n` +
-            `    lsof -ti:${explicitPort} | xargs kill\n` +
-            `  Or use a different port:\n` +
-            `    ${WEBSOCKET_PORT_ENV}=${explicitPort + 1} npx webclaw-mcp`,
-        );
-      } else {
+    // Explicit port first, then any WEBCLAW_PORT_FALLBACK ports in order
+    const candidates = [explicitPort, ...fallbackPorts.filter((p) => p !== explicitPort)];
+    let boundPort: number | null = null;
+    wsClient = null!;
+    for (const port of candidates) {
+      try {
+        wsClient = await WebSocketClient.create(port);
+        boundPort = port;
+        break;
+      } catch (err) {
+        const error = err as NodeJS.ErrnoException;
+        if (error.code === 'EADDRINUSE') {
+          console.error(`[WebClaw] Port ${port} is already in use.`);
+          continue;
+        }
         console.error(`[WebClaw] WebSocket server error: ${error.message}`);
+        process.exit(1);
       }
+    }
+    if (boundPort === null) {
+      console.error(
+        `[WebClaw] Port(s) ${candidates.join(', ')} are all in use.\n` +
+          `  Another WebClaw instance may be running. To fix, stop it, or set\n` +
+          `  ${PORT_FALLBACK_ENV} to a free port that the browser extension's\n` +
+          `  port allowlist includes.`,
+      );
       process.exit(1);
     }
-    console.error(`[WebClaw] WebSocket server listening on 127.0.0.1:${explicitPort}`);
+    if (boundPort !== explicitPort) {
+      console.error(`[WebClaw] Fell back from port ${explicitPort} to ${boundPort} (${PORT_FALLBACK_ENV}).`);
+    }
+    console.error(`[WebClaw] WebSocket server listening on 127.0.0.1:${boundPort}`);
   } else {
     // Auto-scan port range
     let boundPort: number | null = null;
